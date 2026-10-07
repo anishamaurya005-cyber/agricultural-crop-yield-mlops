@@ -1,0 +1,5 @@
+outs:
+- md5: e6c3f9e200db7446f64da66ae2178181
+  size: 124600986
+  hash: md5
+  path: crop_yield_model_mlflow.pkl
