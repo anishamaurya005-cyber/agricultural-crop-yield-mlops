@@ -1,70 +1,27 @@
 
-pipeline {
-    agent any
+stage('API Tests') {
+    steps {
+        sh '''
+            set -eu
 
-    stages {
-        stage('Prepare Model') {
-            steps {
-                sh '''
-                    set -eu
+            docker rm -f crop-yield-test-runner 2>/dev/null || true
 
-                    SOURCE="/workspace/models/crop_yield_model_mlflow.pkl"
-                    DEST="$WORKSPACE/models/crop_yield_model_mlflow.pkl"
+            docker run -d \
+                --name crop-yield-test-runner \
+                python:3.12-slim \
+                sh -c "sleep 600"
 
-                    if [ ! -f "$SOURCE" ]; then
-                        echo "ERROR: Model file not found at $SOURCE"
-                        exit 1
-                    fi
+            docker exec crop-yield-test-runner mkdir -p /app
 
-                    mkdir -p "$WORKSPACE/models"
-                    cp "$SOURCE" "$DEST"
+            docker cp "$WORKSPACE/." crop-yield-test-runner:/app/
 
-                    ls -lh "$DEST"
-                    echo "Model prepared successfully."
-                '''
-            }
-        }
+            docker exec -w /app crop-yield-test-runner \
+                pip install --no-cache-dir -r requirements.txt pytest httpx
 
-        stage('API Tests') {
-            steps {
-                sh '''
-                    set -eu
+            docker exec -w /app crop-yield-test-runner \
+                python -m pytest tests/test_api.py -v
 
-                    docker rm -f crop-yield-test-runner 2>/dev/null || true
-
-                    docker run -d \
-                        --name crop-yield-test-runner \
-                        -v "$WORKSPACE:/app" \
-                        -w /app \
-                        python:3.12-slim \
-                        sh -c "sleep 600"
-
-                    docker exec crop-yield-test-runner \
-                        pip install --no-cache-dir -r requirements.txt pytest httpx
-
-                    docker exec crop-yield-test-runner \
-                        python -m pytest tests/test_api.py -v
-
-                    docker rm -f crop-yield-test-runner
-                '''
-            }
-        }
-
-        stage('Docker Build') {
-            steps {
-                sh '''
-                    docker build -t crop-yield-api:latest .
-                '''
-            }
-        }
-    }
-
-    post {
-        success {
-            echo 'SUCCESS: Crop Yield MLOps pipeline completed.'
-        }
-        failure {
-            echo 'FAILED: Check the Console Output for details.'
-        }
+            docker rm -f crop-yield-test-runner
+        '''
     }
 }
