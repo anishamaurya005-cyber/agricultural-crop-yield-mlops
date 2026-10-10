@@ -1,12 +1,10 @@
-
 pipeline {
     agent any
 
     stages {
         stage('Checkout') {
             steps {
-                echo 'Preparing Crop Yield Prediction project'
-                sh 'pwd'
+                echo "Project workspace: ${WORKSPACE}"
                 sh 'ls -la'
             }
         }
@@ -14,11 +12,19 @@ pipeline {
         stage('API Tests') {
             steps {
                 sh '''
-                    docker run --rm \
-                      -v "$WORKSPACE:/app" \
+                    set -e
+                    docker rm -f crop-yield-test-runner 2>/dev/null || true
+
+                    docker create \
+                      --name crop-yield-test-runner \
                       -w /app \
                       python:3.12-slim \
                       sh -c "pip install --no-cache-dir -r requirements.txt pytest httpx && python -m pytest tests/test_api.py -v"
+
+                    docker cp "$WORKSPACE/." crop-yield-test-runner:/app/
+
+                    docker start -a crop-yield-test-runner
+                    docker rm -f crop-yield-test-runner
                 '''
             }
         }
@@ -32,10 +38,10 @@ pipeline {
 
     post {
         success {
-            echo 'SUCCESS: API tests passed and Docker image was built.'
+            echo 'SUCCESS: API tests passed and Docker image built.'
         }
         failure {
-            echo 'FAILED: Check the stage logs for details.'
+            echo 'FAILED: Check the console output for the error.'
         }
     }
 }
